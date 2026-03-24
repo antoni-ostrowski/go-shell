@@ -2,49 +2,50 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/antoni-ostrowski/go-shell/programs"
 )
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
+	programsMap := make(map[string]Program)
+	programsMap["cd"] = Program{
+		runner: &programs.CdRunner{},
+	}
+
 	for {
-		fmt.Print("> ")
+
+		curWorkingDir, err := os.Getwd()
+		if err != nil {
+			fmt.Fprint(os.Stderr, err)
+		}
+		fmt.Printf("(%s)> ", curWorkingDir)
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Fprint(os.Stderr, err)
 		}
-		fmt.Print("|" + input + "|\n")
-		if err = execInput(input); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		command, args := cleanOutStdIn(input)
+
+		bin, ok := programsMap[command]
+		if !ok {
+			cmd := exec.Command(command, args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run()
+		} else {
+			bin.runner.Exec(args)
 		}
+
 	}
 }
 
-func execInput(input string) error {
-	input = strings.TrimSuffix(input, "\n")
-
-	args := strings.Split(input, " ")
-	fmt.Printf("args: %v\n", args)
-
-	switch args[0] {
-	case "cd":
-		if len(args) < 2 {
-			return errors.New("no path")
-		}
-		return os.Chdir(args[1])
-	case "exit":
-		os.Exit(0)
-	}
-
-	cmd := exec.Command(args[0], args[1:]...)
-
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-
-	return cmd.Run()
+func cleanOutStdIn(input string) (string, []string) {
+	cleared := strings.TrimSuffix(input, "\n")
+	splitted := strings.Split(cleared, " ")
+	return splitted[0], splitted[1:]
 }
